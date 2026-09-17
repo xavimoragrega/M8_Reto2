@@ -1,5 +1,5 @@
-# Seleccionar las personas ocupadas con información válida
-# sobre satisfacción con la vida y peso de análisis
+# Seleccionar las personas que trabajan
+# y tienen datos válidos
 
 datos_trabajadores <- datos_depurados[
   datos_depurados$mnactic == 1 &
@@ -8,12 +8,18 @@ datos_trabajadores <- datos_depurados[
 ]
 
 
-# Evolución temporal de la satisfacción con la vida
-# en los países presentes en todas las rondas
+# Seleccionar los países que están presentes
+# en todas las rondas
 
 datos_temporales <- datos_trabajadores[
   datos_trabajadores$pais %in% paises_temporales,
 ]
+
+
+
+# EVOLUCIÓN DE LA SATISFACCIÓN
+
+# Calcular la satisfacción media de cada año
 
 resultados_temporales <- do.call(
   rbind,
@@ -27,55 +33,59 @@ resultados_temporales <- do.call(
       
       data.frame(
         any = a,
-        satisfaccion_ponderada = weighted.mean(
+        satisfaccion_media = weighted.mean(
           datos_any$stflife,
-          datos_any$anweight_complet
+          datos_any$anweight_complet,
+          na.rm = TRUE
         )
       )
     }
   )
 )
 
-resultados_temporales
+
+# Ver los resultados
+
+print(resultados_temporales)
 
 
-# Número de trabajadores analizados por año
+# Ver cuántas personas hay cada año
 
-table(datos_temporales$any)
+print(table(datos_temporales$any))
 
 
-# Gráfico de la evolución de la satisfacción con la vida
-# de los trabajadores entre 2002 y 2023
+# Ver el cambio entre 2002 y 2023
 
-plot(
-  resultados_temporales$any,
-  resultados_temporales$satisfaccion_ponderada,
-  type = "o",
-  xlab = "Año",
-  ylab = "Satisfacción media con la vida",
-  main = "Evolución de la satisfacción con la vida de los trabajadores",
-  ylim = c(1, 10),
-  xaxt = "n"
+satisfaccion_2002 <- resultados_temporales[
+  resultados_temporales$any == 2002,
+  "satisfaccion_media"
+]
+
+satisfaccion_2023 <- resultados_temporales[
+  resultados_temporales$any == 2023,
+  "satisfaccion_media"
+]
+
+cambio_total_2002_2023 <- (
+  satisfaccion_2023 -
+    satisfaccion_2002
 )
 
-axis(
-  side = 1,
-  at = resultados_temporales$any,
-  labels = resultados_temporales$any,
-  las = 2,
-  cex.axis = 0.8
-)
+
+print(cambio_total_2002_2023)
+
+# SITUACIÓN ECONÓMICA
 
 
-# Relación entre situación económica
-# y satisfacción con la vida
+# Quedarnos con las personas que tienen
+# información sobre su situación económica
 
 datos_economicos <- datos_temporales[
   !is.na(datos_temporales$hincfel),
 ]
 
 
-# Crear la satisfacción ponderada para cada observación
+# Multiplicar la satisfacción por el peso
 
 datos_economicos$satisfaccion_ponderada <- (
   datos_economicos$stflife *
@@ -83,81 +93,96 @@ datos_economicos$satisfaccion_ponderada <- (
 )
 
 
-# Calcular los resultados por situación económica
+# Calcular los resultados para cada año
+# y cada situación económica
 
-resultados_economicos <- aggregate(
+resultados_economicos_temporales <- aggregate(
   cbind(
     satisfaccion_ponderada,
     anweight_complet
-  ) ~ hincfel,
+  ) ~ any + hincfel,
   data = datos_economicos,
   FUN = sum
 )
 
 
-# Calcular la satisfacción media ponderada
+# Calcular la satisfacción media
 
-resultados_economicos$satisfaccion_media <- (
-  resultados_economicos$satisfaccion_ponderada /
-    resultados_economicos$anweight_complet
+resultados_economicos_temporales$satisfaccion_media <- (
+  resultados_economicos_temporales$satisfaccion_ponderada /
+    resultados_economicos_temporales$anweight_complet
 )
 
 
-# Crear etiquetas descriptivas para las categorías
+# Poner nombres fáciles de entender a las categorías
 
-resultados_economicos$situacion_economica <- factor(
-  resultados_economicos$hincfel,
+resultados_economicos_temporales$situacion_economica <- factor(
+  resultados_economicos_temporales$hincfel,
   levels = c(1, 2, 3, 4),
   labels = c(
-    "Vivir cómodamente",
-    "Afrontar gastos",
-    "Con dificultades",
-    "Con muchas dificultades"
+    "Vive cómodamente",
+    "Se las arregla",
+    "Tiene dificultades",
+    "Tiene muchas dificultades"
   )
 )
 
-resultados_economicos
 
+# Ordenar los resultados por año y categoría
 
-# Gráfico de la relación entre situación económica
-# y satisfacción con la vida
-
-par(mar = c(8, 4, 4, 2) + 0.1)
-
-barplot(
-  resultados_economicos$satisfaccion_media,
-  names.arg = FALSE,
-  ylim = c(0, 10),
-  ylab = "Satisfacción media con la vida",
-  xlab = "",
-  main = "Satisfacción con la vida según situación económica"
-)
-
-text(
-  x = c(0.7, 1.9, 3.1, 4.3),
-  y = -0.3,
-  labels = c(
-    "Vivir cómodamente",
-    "Afrontar gastos",
-    "Con dificultades",
-    "Con muchas dificultades"
+resultados_economicos_temporales <- resultados_economicos_temporales[
+  order(
+    resultados_economicos_temporales$any,
+    resultados_economicos_temporales$hincfel
   ),
-  srt = 45,
-  adj = 1,
-  xpd = TRUE,
-  cex = 0.8
+]
+
+
+# Ver los resultados
+
+print(resultados_economicos_temporales)
+
+
+# Ver los resultados de 2023
+
+resultados_economicos_2023 <- resultados_economicos_temporales[
+  resultados_economicos_temporales$any == 2023,
+]
+
+
+print(resultados_economicos_2023)
+
+
+# Ver la diferencia entre la categoría
+# con mayor y menor satisfacción en 2023
+
+diferencia_economica_2023 <- (
+  max(
+    resultados_economicos_2023$satisfaccion_media,
+    na.rm = TRUE
+  ) -
+    min(
+      resultados_economicos_2023$satisfaccion_media,
+      na.rm = TRUE
+    )
 )
 
 
-# Relación entre frecuencia de contacto social
-# y satisfacción con la vida
+print(diferencia_economica_2023)
+
+
+# CONTACTO SOCIAL
+
+
+# Quedarnos con las personas que tienen
+# información sobre contacto social
 
 datos_sociales <- datos_temporales[
   !is.na(datos_temporales$sclmeet),
 ]
 
 
-# Crear la satisfacción ponderada para cada observación
+# Multiplicar la satisfacción por el peso
 
 datos_sociales$satisfaccion_ponderada <- (
   datos_sociales$stflife *
@@ -165,30 +190,31 @@ datos_sociales$satisfaccion_ponderada <- (
 )
 
 
-# Calcular los resultados por frecuencia de contacto social
+# Calcular los resultados para cada año
+# y cada frecuencia de contacto
 
-resultados_sociales <- aggregate(
+resultados_sociales_temporales <- aggregate(
   cbind(
     satisfaccion_ponderada,
     anweight_complet
-  ) ~ sclmeet,
+  ) ~ any + sclmeet,
   data = datos_sociales,
   FUN = sum
 )
 
 
-# Calcular la satisfacción media ponderada
+# Calcular la satisfacción media
 
-resultados_sociales$satisfaccion_media <- (
-  resultados_sociales$satisfaccion_ponderada /
-    resultados_sociales$anweight_complet
+resultados_sociales_temporales$satisfaccion_media <- (
+  resultados_sociales_temporales$satisfaccion_ponderada /
+    resultados_sociales_temporales$anweight_complet
 )
 
 
-# Crear etiquetas descriptivas para las categorías
+# Poner nombres fáciles de entender a las categorías
 
-resultados_sociales$frecuencia_contacto <- factor(
-  resultados_sociales$sclmeet,
+resultados_sociales_temporales$frecuencia_contacto <- factor(
+  resultados_sociales_temporales$sclmeet,
   levels = c(1, 2, 3, 4, 5, 6, 7),
   labels = c(
     "Nunca",
@@ -197,52 +223,66 @@ resultados_sociales$frecuencia_contacto <- factor(
     "Varias veces al mes",
     "Una vez a la semana",
     "Varias veces a la semana",
-    "Todos los días"
+    "Cada día"
   )
 )
 
-resultados_sociales
 
+# Ordenar los resultados por año y categoría
 
-# Gráfico de la relación entre frecuencia de contacto social
-# y satisfacción con la vida
-
-par(mar = c(9, 4, 4, 2) + 0.1)
-
-barplot(
-  resultados_sociales$satisfaccion_media,
-  names.arg = FALSE,
-  ylim = c(0, 10),
-  ylab = "Satisfacción media con la vida",
-  xlab = "",
-  main = "Satisfacción con la vida según frecuencia de contacto social"
-)
-
-text(
-  x = c(0.7, 1.9, 3.1, 4.3, 5.5, 6.7, 7.9),
-  y = -0.3,
-  labels = c(
-    "Nunca",
-    "Menos de una vez al mes",
-    "Una vez al mes",
-    "Varias veces al mes",
-    "Una vez a la semana",
-    "Varias veces a la semana",
-    "Todos los días"
+resultados_sociales_temporales <- resultados_sociales_temporales[
+  order(
+    resultados_sociales_temporales$any,
+    resultados_sociales_temporales$sclmeet
   ),
-  srt = 45,
-  adj = 1,
-  xpd = TRUE,
-  cex = 0.75
+]
+
+
+# Ver los resultados
+
+print(resultados_sociales_temporales)
+
+
+# Ver los resultados de 2023
+
+resultados_sociales_2023 <- resultados_sociales_temporales[
+  resultados_sociales_temporales$any == 2023,
+]
+
+
+print(resultados_sociales_2023)
+
+
+# Ver la diferencia entre la categoría
+# con mayor y menor satisfacción en 2023
+
+diferencia_social_2023 <- (
+  max(
+    resultados_sociales_2023$satisfaccion_media,
+    na.rm = TRUE
+  ) -
+    min(
+      resultados_sociales_2023$satisfaccion_media,
+      na.rm = TRUE
+    )
 )
 
 
-# Comparación de la satisfacción con la vida entre países
+print(diferencia_social_2023)
+
+
+# COMPARAR LOS PAÍSES
+
+
+# Multiplicar la satisfacción por el peso
 
 datos_temporales$satisfaccion_ponderada <- (
   datos_temporales$stflife *
     datos_temporales$anweight_complet
 )
+
+
+# Calcular los resultados para cada país
 
 resultados_paises <- aggregate(
   cbind(
@@ -254,7 +294,7 @@ resultados_paises <- aggregate(
 )
 
 
-# Calcular la satisfacción media ponderada por país
+# Calcular la satisfacción media de cada país
 
 resultados_paises$satisfaccion_media <- (
   resultados_paises$satisfaccion_ponderada /
@@ -265,22 +305,124 @@ resultados_paises$satisfaccion_media <- (
 # Ordenar los países de menor a mayor satisfacción
 
 resultados_paises <- resultados_paises[
-  order(resultados_paises$satisfaccion_media),
+  order(
+    resultados_paises$satisfaccion_media
+  ),
 ]
 
-resultados_paises
+
+# Ver los resultados
+
+print(resultados_paises)
 
 
-# Gráfico de la satisfacción con la vida por país
+# CAMBIO DE CADA PAÍS DESDE 2002
 
-par(mar = c(5, 10, 4, 2) + 0.1)
 
-barplot(
-  resultados_paises$satisfaccion_media,
-  names.arg = resultados_paises$pais,
-  horiz = TRUE,
-  las = 1,
-  xlim = c(0, 10),
-  xlab = "Satisfacción media con la vida",
-  main = "Satisfacción con la vida de los trabajadores por país"
+# Quedarnos con los datos de 2002
+
+datos_2002 <- datos_temporales[
+  datos_temporales$any == 2002,
+]
+
+
+# Multiplicar la satisfacción por el peso
+
+datos_2002$satisfaccion_ponderada <- (
+  datos_2002$stflife *
+    datos_2002$anweight_complet
 )
+
+
+# Calcular la satisfacción media de cada país en 2002
+
+resultados_2002_paises <- aggregate(
+  cbind(
+    satisfaccion_ponderada,
+    anweight_complet
+  ) ~ pais,
+  data = datos_2002,
+  FUN = sum
+)
+
+
+resultados_2002_paises$satisfaccion_2002 <- (
+  resultados_2002_paises$satisfaccion_ponderada /
+    resultados_2002_paises$anweight_complet
+)
+
+
+# Quedarnos con los datos de 2023
+
+datos_2023 <- datos_temporales[
+  datos_temporales$any == 2023,
+]
+
+
+# Multiplicar la satisfacción por el peso
+
+datos_2023$satisfaccion_ponderada <- (
+  datos_2023$stflife *
+    datos_2023$anweight_complet
+)
+
+
+# Calcular la satisfacción media de cada país en 2023
+
+resultados_2023_paises <- aggregate(
+  cbind(
+    satisfaccion_ponderada,
+    anweight_complet
+  ) ~ pais,
+  data = datos_2023,
+  FUN = sum
+)
+
+
+resultados_2023_paises$satisfaccion_2023 <- (
+  resultados_2023_paises$satisfaccion_ponderada /
+    resultados_2023_paises$anweight_complet
+)
+
+
+# Juntar los resultados de 2002 y 2023
+
+resultados_cambio_paises <- merge(
+  resultados_2002_paises[
+    c(
+      "pais",
+      "satisfaccion_2002"
+    )
+  ],
+  resultados_2023_paises[
+    c(
+      "pais",
+      "satisfaccion_2023"
+    )
+  ],
+  by = "pais"
+)
+
+
+# Calcular cuánto ha cambiado cada país
+
+resultados_cambio_paises$cambio_2002_2023 <- (
+  resultados_cambio_paises$satisfaccion_2023 -
+    resultados_cambio_paises$satisfaccion_2002
+)
+
+
+# Ordenar los países según su cambio
+
+resultados_cambio_paises <- resultados_cambio_paises[
+  order(
+    resultados_cambio_paises$cambio_2002_2023
+  ),
+]
+
+
+# Ver los resultados
+
+print(resultados_cambio_paises)
+
+

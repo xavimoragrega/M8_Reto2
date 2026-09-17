@@ -1,0 +1,976 @@
+---
+title: "Satisfacción con la vida de los trabajadores"
+author: "Xavi Moragrega"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+
+# ============================================================
+# CONFIGURACIÓN
+# ============================================================
+
+knitr::opts_chunk$set(
+  echo = FALSE,
+  warning = FALSE,
+  message = FALSE
+)
+
+library(ggplot2)
+library(knitr)
+library(sf)
+library(rnaturalearth)
+library(here)
+
+# Cargar los datos depurados
+datos <- read.csv(
+  here(
+    "Datos",
+    "depurada",
+    "datos_depurados.csv"
+  )
+)
+
+# Seleccionar las personas que trabajan
+# y tienen datos válidos
+datos_trabajadores <- datos[
+  datos$trabajador == TRUE &
+    !is.na(datos$stflife) &
+    !is.na(datos$anweight_complet) &
+    datos$pais_temporal == TRUE,
+]
+
+# Función para calcular medias ponderadas
+media_ponderada <- function(x, w) {
+  weighted.mean(x, w, na.rm = TRUE)
+}
+
+# Calcular la satisfacción media para cada año
+resultados_anuales <- do.call(
+  rbind,
+  lapply(
+    split(
+      datos_trabajadores,
+      datos_trabajadores$any
+    ),
+    function(df) {
+
+      data.frame(
+        any = unique(df$any),
+        satisfaccion_media = media_ponderada(
+          df$stflife,
+          df$anweight_complet
+        )
+      )
+    }
+  )
+)
+
+# Ordenar los años
+resultados_anuales <- resultados_anuales[
+  order(resultados_anuales$any),
+]
+
+```
+
+# 1. Introducción
+
+El bienestar de las personas trabajadoras constituye una dimensión relevante para comprender la experiencia de las personas en el entorno laboral. Sin embargo, su interpretación también depende de factores económicos, sociales y del contexto de cada país.
+
+Este informe presenta un análisis de la satisfacción con la vida de las personas trabajadoras en diferentes países europeos entre 2002 y 2023, utilizando datos de la European Social Survey (ESS).
+
+La satisfacción con la vida se utiliza como indicador principal de bienestar y se analiza desde diferentes perspectivas. En concreto, se estudia su evolución a lo largo del tiempo, las diferencias entre países y las diferencias observadas según la situación económica percibida del hogar y la frecuencia de contacto social.
+
+El objetivo no es establecer relaciones causales ni medir directamente el bienestar de los empleados de una organización concreta. La finalidad es identificar patrones en los datos y proporcionar un contexto comparativo que pueda resultar de interés, entre otros ámbitos, para profesionales de Recursos Humanos.
+
+# 2. Objetivos
+
+## Objetivo general
+
+Identificar y visualizar patrones de satisfacción con la vida entre las personas trabajadoras de diferentes países europeos y explorar cómo estos patrones se relacionan con dimensiones económicas, sociales y geográficas a lo largo del tiempo.
+
+La satisfacción con la vida (`stflife`), medida en una escala de 0 a 10, se utiliza como indicador principal de bienestar. A partir de este indicador, el análisis permite estudiar su evolución temporal, observar diferencias entre países y explorar su relación con la situación económica percibida del hogar y la frecuencia de contacto social.
+
+## Objetivos específicos
+
+1. Analizar la evolución de la satisfacción con la vida de las personas trabajadoras entre 2002 y 2023.
+
+2. Comparar los niveles de satisfacción con la vida entre los países incluidos en la muestra y observar su cambio respecto a 2002.
+
+3. Explorar las diferencias en la satisfacción con la vida según la situación económica percibida del hogar.
+
+4. Explorar las diferencias en la satisfacción con la vida según la frecuencia de contacto social.
+
+# 3. Datos y metodología
+
+## 3.1. Fuente de datos
+
+Los datos utilizados en este proyecto proceden de la European Social Survey (ESS), una encuesta internacional que recoge información sobre diferentes aspectos de la vida social y económica de la población.
+
+Para este análisis se ha utilizado el fichero integrado de la ESS correspondiente a las rondas 1 a 11, que abarcan el periodo comprendido entre 2002 y 2023.
+
+La variable principal del análisis es `stflife`, que mide la satisfacción con la vida en una escala de 0 a 10, donde 0 representa una satisfacción extremadamente baja y 10 una satisfacción extremadamente alta.
+
+También se utilizan variables relacionadas con la situación económica percibida del hogar (`hincfel`) y la frecuencia de contacto social (`sclmeet`), además de las variables necesarias para identificar el país, la ronda de la encuesta, el año y la situación de actividad de los participantes.
+
+## 3.2. Selección de la muestra
+
+La muestra se ha limitado a las personas cuya actividad principal era el trabajo remunerado, identificadas mediante la variable `mnactic`, con valor 1.
+
+Además, se han considerado únicamente las observaciones con información válida sobre satisfacción con la vida (`stflife`) y con un peso de análisis disponible.
+
+Para garantizar la comparabilidad de la evolución temporal, se han seleccionado los 15 países presentes en las 11 rondas analizadas de la ESS. De este modo, el análisis temporal se realiza sobre un conjunto de países constante entre 2002 y 2023.
+
+Tras aplicar estos criterios, la muestra final está formada por `r format(nrow(datos_trabajadores), big.mark = ".", scientific = FALSE)` observaciones.
+
+## 3.3. Depuración y preparación de los datos
+
+La depuración de los datos se realizó mediante un script independiente incluido en el repositorio. El fichero original se mantuvo sin modificaciones y, a partir de él, se generó un fichero de datos depurado.
+
+Los códigos utilizados por la ESS para identificar respuestas especiales, como rechazo de respuesta, desconocimiento o ausencia de respuesta, se recodificaron como valores perdidos (`NA`) en las variables utilizadas en el análisis.
+
+En particular, se depuraron las variables `stflife`, `hincfel`, `sclmeet`, `mnactic`, `dcsfwrka`, `jbprtfp`, `trdawrk` y `stfmjob`, respetando los códigos definidos en el diccionario de variables de la ESS.
+
+También se generaron variables derivadas para facilitar el análisis. Se creó `pais` a partir del código de país de la ESS, `any` para representar el año correspondiente a cada ronda y `trabajador` para identificar a las personas cuya actividad principal era el trabajo remunerado.
+
+Finalmente, se creó `pais_temporal`, que permite identificar los 15 países presentes en las 11 rondas utilizadas para el análisis temporal.
+
+## 3.4. Ponderación
+
+Para el análisis se utilizaron los pesos proporcionados por la ESS. La variable `anweight` corresponde al peso de análisis.
+
+En las rondas en las que este peso no estaba disponible, se reconstruyó mediante el producto de `pspwght` y `pweight`, obteniendo la variable `anweight_complet`.
+
+Las estadísticas descriptivas se calcularon mediante medias ponderadas utilizando `anweight_complet` como peso.
+
+Los valores perdidos se excluyeron de cada cálculo de acuerdo con la disponibilidad de información de las variables analizadas.
+
+## 3.5. Estrategia de visualización
+
+La visualización se ha diseñado para mostrar diferentes dimensiones de la satisfacción con la vida sin concentrar toda la información en un único gráfico.
+
+La evolución temporal se representa mediante un gráfico de líneas, ya que permite observar los cambios entre las diferentes rondas.
+
+Las diferencias según la situación económica y el contacto social se representan mediante mapas de calor. Esta representación permite relacionar cada categoría con los diferentes años y facilita la identificación visual de patrones.
+
+Las diferencias entre países se muestran mediante barras horizontales ordenadas, lo que facilita la comparación de los niveles medios.
+
+Finalmente, el mapa representa el cambio acumulado de la satisfacción respecto a 2002 para los 15 países comparables.
+
+# 4. Resultados
+
+## Resumen de la muestra y principales indicadores
+
+```{r tabla-resumen}
+
+# Calcular la satisfacción media del conjunto de la muestra
+
+satisfaccion_media_total <- media_ponderada(
+  datos_trabajadores$stflife,
+  datos_trabajadores$anweight_complet
+)
+
+# Obtener los valores de 2002 y 2023
+
+satisfaccion_2002 <- resultados_anuales[
+  resultados_anuales$any == 2002,
+  "satisfaccion_media"
+]
+
+satisfaccion_2023 <- resultados_anuales[
+  resultados_anuales$any == 2023,
+  "satisfaccion_media"
+]
+
+# Calcular el cambio entre 2002 y 2023
+
+cambio_total <- satisfaccion_2023 - satisfaccion_2002
+
+# Crear la tabla resumen
+
+tabla_resumen <- data.frame(
+  Indicador = c(
+    "Trabajadores analizados",
+    "Países comparables",
+    "Rondas ESS",
+    "Satisfacción media",
+    "Satisfacción media 2002",
+    "Satisfacción media 2023",
+    "Cambio 2002-2023"
+  ),
+  Valor = c(
+    format(
+      nrow(datos_trabajadores),
+      big.mark = ".",
+      scientific = FALSE
+    ),
+    "15",
+    "11",
+    sprintf("%.2f", satisfaccion_media_total),
+    sprintf("%.2f", satisfaccion_2002),
+    sprintf("%.2f", satisfaccion_2023),
+    sprintf("%+.2f", cambio_total)
+  )
+)
+
+# Mostrar la tabla
+
+knitr::kable(
+  tabla_resumen,
+  format = "html",
+  col.names = c(
+    "Indicador",
+    "Valor"
+  ),
+  align = c(
+    "l",
+    "r"
+  )
+)
+
+```
+
+## 4.1. Evolución de la satisfacción con la vida
+
+La primera dimensión analizada es la evolución temporal de la satisfacción con la vida.
+
+### ¿Cómo ha evolucionado la satisfacción con la vida?
+
+```{r grafico-evolucion, fig.width=8, fig.height=5}
+
+ggplot(
+  resultados_anuales,
+  aes(
+    x = any,
+    y = satisfaccion_media
+  )
+) +
+
+  geom_line(
+    linewidth = 1
+  ) +
+
+  geom_point(
+    size = 2.5
+  ) +
+
+  scale_x_continuous(
+    breaks = resultados_anuales$any
+  ) +
+
+  scale_y_continuous(
+    limits = c(0, 10)
+  ) +
+
+  labs(
+    x = "Año",
+    y = "Satisfacción media",
+    title = "Evolución de la satisfacción con la vida",
+    subtitle = "Trabajadores de los 15 países comparables · Medias ponderadas"
+  ) +
+
+  theme_minimal() +
+
+  theme(
+    axis.text.x = element_text(
+      angle = 45,
+      hjust = 1
+    )
+  )
+
+```
+
+La satisfacción media pasa de `r sprintf("%.2f", satisfaccion_2002)` puntos en 2002 a `r sprintf("%.2f", satisfaccion_2023)` puntos en 2023, lo que supone un cambio de `r sprintf("%+.2f", cambio_total)` puntos en una escala de 0 a 10.
+
+El valor máximo del periodo se observa en `r resultados_anuales$any[which.max(resultados_anuales$satisfaccion_media)]`, con una satisfacción media de `r sprintf("%.2f", max(resultados_anuales$satisfaccion_media))` puntos.
+
+La evolución no es completamente lineal. Se observan incrementos en diferentes momentos del periodo y un descenso en 2020 respecto a 2018, seguido de una recuperación en 2023.
+
+## 4.2. Situación económica y satisfacción con la vida
+
+La segunda dimensión analizada es la situación económica percibida del hogar.
+
+Esta variable permite observar si existen diferencias en la satisfacción con la vida entre personas que perciben de manera diferente la situación económica de su hogar.
+
+Para analizar la evolución de estas diferencias se utiliza un mapa de calor que relaciona la situación económica con los diferentes años disponibles.
+
+```{r resultados-economico, include=FALSE}
+
+# Seleccionar los datos con información económica válida
+
+datos_economico <- datos_trabajadores[
+  !is.na(datos_trabajadores$hincfel),
+]
+
+# Calcular la media para cada año y categoría económica
+
+resultados_economico <- do.call(
+  rbind,
+  lapply(
+    split(
+      datos_economico,
+      list(
+        datos_economico$any,
+        datos_economico$hincfel
+      )
+    ),
+    function(df) {
+
+      if (nrow(df) == 0) {
+        return(NULL)
+      }
+
+      data.frame(
+        any = unique(df$any),
+        hincfel = unique(df$hincfel),
+        satisfaccion_media = media_ponderada(
+          df$stflife,
+          df$anweight_complet
+        )
+      )
+    }
+  )
+)
+
+# Convertir las categorías en factores con nombres
+
+resultados_economico$hincfel <- factor(
+  resultados_economico$hincfel,
+  levels = 1:4,
+  labels = c(
+    "Vive cómodamente",
+    "Se las arregla",
+    "Tiene dificultades",
+    "Tiene muchas dificultades"
+  )
+)
+
+# Ordenar los resultados
+
+resultados_economico <- resultados_economico[
+  order(
+    resultados_economico$any,
+    resultados_economico$hincfel
+  ),
+]
+
+# Obtener los resultados de 2023
+
+resultados_economico_2023 <- resultados_economico[
+  resultados_economico$any == 2023,
+]
+
+```
+
+### ¿Qué diferencias se observan según la situación económica?
+
+```{r grafico-economico, fig.width=8, fig.height=5.5}
+
+ggplot(
+  resultados_economico,
+  aes(
+    x = any,
+    y = hincfel,
+    fill = satisfaccion_media
+  )
+) +
+
+  geom_tile(
+    colour = "white",
+    linewidth = 0.4
+  ) +
+
+  geom_text(
+    aes(
+      label = sprintf(
+        "%.1f",
+        satisfaccion_media
+      )
+    ),
+    colour = "white",
+    size = 3.5,
+    fontface = "bold"
+  ) +
+
+  scale_fill_gradientn(
+    name = "Satisfacción\nmedia",
+    colours = c(
+      "#E8F1F7",
+      "#BFD8E7",
+      "#7FAAC3",
+      "#4B7F9D",
+      "#285C7A",
+      "#123B5D"
+    ),
+    values = c(
+      0,
+      0.20,
+      0.45,
+      0.65,
+      0.82,
+      0.92
+    ),
+    limits = c(0, 10),
+    na.value = "grey90"
+  ) +
+
+  scale_x_continuous(
+    breaks = sort(
+      unique(resultados_economico$any)
+    )
+  ) +
+
+  labs(
+    x = "Año",
+    y = "Situación económica percibida",
+    title = "Diferencias de satisfacción según la situación económica",
+    subtitle = "Medias ponderadas de satisfacción por año y situación económica percibida"
+  ) +
+
+  theme_minimal() +
+
+  theme(
+    axis.title = element_text(
+      face = "bold"
+    )
+  )
+
+```
+
+En 2023, la satisfacción media entre las personas que declaran vivir cómodamente es de `r sprintf("%.2f", resultados_economico_2023$satisfaccion_media[resultados_economico_2023$hincfel == "Vive cómodamente"])` puntos.
+
+Entre quienes declaran tener muchas dificultades, la media es de `r sprintf("%.2f", resultados_economico_2023$satisfaccion_media[resultados_economico_2023$hincfel == "Tiene muchas dificultades"])` puntos.
+
+La diferencia entre ambas categorías es de `r sprintf("%.2f", resultados_economico_2023$satisfaccion_media[resultados_economico_2023$hincfel == "Vive cómodamente"] - resultados_economico_2023$satisfaccion_media[resultados_economico_2023$hincfel == "Tiene muchas dificultades"])` puntos.
+
+El mapa de calor permite observar que las categorías con una situación económica percibida más favorable presentan, en general, niveles superiores de satisfacción.
+
+Estos resultados muestran una asociación observada entre la situación económica percibida y la satisfacción con la vida. No permiten establecer que una variable sea la causa de la otra.
+
+## 4.3. Contacto social y satisfacción con la vida
+
+La tercera dimensión analizada es la frecuencia de contacto social.
+
+La variable `sclmeet` permite observar las diferencias de satisfacción entre personas que mantienen contacto con otras personas con distinta frecuencia.
+
+Al igual que en el análisis económico, se utiliza un mapa de calor para observar simultáneamente las diferencias entre categorías y su evolución temporal.
+
+```{r resultados-social, include=FALSE}
+
+# Seleccionar los datos con información social válida
+
+datos_social <- datos_trabajadores[
+  !is.na(datos_trabajadores$sclmeet),
+]
+
+# Calcular la media para cada año y categoría social
+
+resultados_social <- do.call(
+  rbind,
+  lapply(
+    split(
+      datos_social,
+      list(
+        datos_social$any,
+        datos_social$sclmeet
+      )
+    ),
+    function(df) {
+
+      if (nrow(df) == 0) {
+        return(NULL)
+      }
+
+      data.frame(
+        any = unique(df$any),
+        sclmeet = unique(df$sclmeet),
+        satisfaccion_media = media_ponderada(
+          df$stflife,
+          df$anweight_complet
+        )
+      )
+    }
+  )
+)
+
+# Convertir las categorías en factores con nombres
+
+resultados_social$sclmeet <- factor(
+  resultados_social$sclmeet,
+  levels = 1:7,
+  labels = c(
+    "Nunca",
+    "Menos de una vez al mes",
+    "Una vez al mes",
+    "Varias veces al mes",
+    "Una vez a la semana",
+    "Varias veces a la semana",
+    "Cada día"
+  )
+)
+
+# Ordenar los resultados
+
+resultados_social <- resultados_social[
+  order(
+    resultados_social$any,
+    resultados_social$sclmeet
+  ),
+]
+
+# Obtener los resultados de 2023
+
+resultados_social_2023 <- resultados_social[
+  resultados_social$any == 2023,
+]
+
+```
+
+### ¿Qué diferencias se observan según el contacto social?
+
+```{r grafico-social, fig.width=8, fig.height=6}
+
+ggplot(
+  resultados_social,
+  aes(
+    x = any,
+    y = sclmeet,
+    fill = satisfaccion_media
+  )
+) +
+
+  geom_tile(
+    colour = "white",
+    linewidth = 0.4
+  ) +
+
+  geom_text(
+    aes(
+      label = sprintf(
+        "%.1f",
+        satisfaccion_media
+      )
+    ),
+    colour = "white",
+    size = 3.2,
+    fontface = "bold"
+  ) +
+
+  scale_fill_gradientn(
+    name = "Satisfacción\nmedia",
+    colours = c(
+      "#E8F1F7",
+      "#BFD8E7",
+      "#7FAAC3",
+      "#4B7F9D",
+      "#285C7A",
+      "#123B5D"
+    ),
+    values = c(
+      0,
+      0.20,
+      0.45,
+      0.65,
+      0.82,
+      0.92
+    ),
+    limits = c(0, 10),
+    na.value = "grey90"
+  ) +
+
+  scale_x_continuous(
+    breaks = sort(
+      unique(resultados_social$any)
+    )
+  ) +
+
+  labs(
+    x = "Año",
+    y = "Frecuencia de contacto social",
+    title = "Diferencias de satisfacción según el contacto social",
+    subtitle = "Medias ponderadas de satisfacción por año y frecuencia de contacto"
+  ) +
+
+  theme_minimal() +
+
+  theme(
+    axis.text.x = element_text(
+      angle = 45,
+      hjust = 1
+    ),
+    axis.title = element_text(
+      face = "bold"
+    )
+  )
+
+```
+
+En 2023, la satisfacción media entre las personas que declaran no mantener contacto social es de `r sprintf("%.2f", resultados_social_2023$satisfaccion_media[resultados_social_2023$sclmeet == "Nunca"])` puntos.
+
+Entre quienes indican mantener contacto social cada día, la satisfacción media alcanza `r sprintf("%.2f", resultados_social_2023$satisfaccion_media[resultados_social_2023$sclmeet == "Cada día"])` puntos.
+
+La diferencia entre ambas categorías es de `r sprintf("%.2f", resultados_social_2023$satisfaccion_media[resultados_social_2023$sclmeet == "Cada día"] - resultados_social_2023$satisfaccion_media[resultados_social_2023$sclmeet == "Nunca"])` puntos.
+
+En conjunto, se observa una satisfacción generalmente superior entre las categorías de contacto más frecuente, aunque la relación no es estrictamente lineal en todas las categorías.
+
+Estos resultados muestran una asociación observada entre la frecuencia de contacto social y la satisfacción con la vida. No permiten establecer una relación causal.
+
+## 4.4. Diferencias entre países
+
+La dimensión geográfica permite comparar los niveles medios de satisfacción entre los países incluidos en el análisis.
+
+Para facilitar la comparación, los países se ordenan de menor a mayor satisfacción media.
+
+```{r resultados-paises, include=FALSE}
+
+# Calcular la media para cada país
+
+resultados_paises <- do.call(
+  rbind,
+  lapply(
+    split(
+      datos_trabajadores,
+      datos_trabajadores$pais
+    ),
+    function(df) {
+
+      data.frame(
+        pais = unique(df$pais),
+        satisfaccion_media = media_ponderada(
+          df$stflife,
+          df$anweight_complet
+        )
+      )
+    }
+  )
+)
+
+# Ordenar los países según su satisfacción
+
+resultados_paises <- resultados_paises[
+  order(
+    resultados_paises$satisfaccion_media
+  ),
+]
+
+```
+
+### ¿Cómo se diferencian los países en satisfacción?
+
+```{r grafico-paises, fig.width=8, fig.height=6}
+
+ggplot(
+  resultados_paises,
+  aes(
+    x = satisfaccion_media,
+    y = reorder(
+      pais,
+      satisfaccion_media
+    )
+  )
+) +
+
+  geom_col(
+    width = 0.7,
+    fill = "#123B5D"
+  ) +
+
+  geom_text(
+    aes(
+      label = sprintf(
+        "%.2f",
+        satisfaccion_media
+      )
+    ),
+    hjust = -0.15,
+    size = 3.5
+  ) +
+
+  scale_x_continuous(
+    limits = c(0, 8.7)
+  ) +
+
+  labs(
+    x = "Satisfacción media",
+    y = NULL,
+    title = "Diferencias en la satisfacción entre países",
+    subtitle = "Media ponderada del periodo 2002-2023"
+  ) +
+
+  theme_minimal()
+
+```
+
+Considerando el conjunto del periodo 2002-2023, `r resultados_paises$pais[nrow(resultados_paises)]` presenta la satisfacción media ponderada más elevada entre los países analizados, con `r sprintf("%.2f", resultados_paises$satisfaccion_media[nrow(resultados_paises)])` puntos.
+
+En el extremo inferior de la distribución se encuentra `r resultados_paises$pais[1]`, con una satisfacción media de `r sprintf("%.2f", resultados_paises$satisfaccion_media[1])` puntos.
+
+Estas diferencias describen variación entre países dentro de la muestra analizada. El gráfico no permite determinar qué factores concretos explican estas diferencias.
+
+## 4.5. Cambio de la satisfacción respecto a 2002
+
+Además de comparar los niveles medios entre países, se analiza cómo ha cambiado la satisfacción respecto al inicio del periodo.
+
+El año 2002 se utiliza como referencia y se calcula la diferencia entre la satisfacción media de cada país en 2023 y su valor en 2002.
+
+Los países que no forman parte de las 11 rondas analizadas se muestran en gris para mantener visible el contexto geográfico europeo.
+
+```{r mapa-evolucion, fig.width=9, fig.height=7}
+
+# Cargar el mapa mundial
+
+mapa_mundial <- ne_countries(
+  scale = "medium",
+  returnclass = "sf"
+)
+
+# Seleccionar Europa
+
+mapa_europa <- mapa_mundial[
+  mapa_mundial$continent == "Europe",
+]
+
+# Seleccionar los datos de 2002
+
+datos_2002 <- datos_trabajadores[
+  datos_trabajadores$any == 2002,
+]
+
+# Calcular la media de cada país en 2002
+
+resultados_2002 <- do.call(
+  rbind,
+  lapply(
+    split(
+      datos_2002,
+      datos_2002$cntry
+    ),
+    function(df) {
+
+      data.frame(
+        cntry = unique(df$cntry),
+        satisfaccion_2002 = media_ponderada(
+          df$stflife,
+          df$anweight_complet
+        )
+      )
+    }
+  )
+)
+
+# Seleccionar los datos de 2023
+
+datos_2023 <- datos_trabajadores[
+  datos_trabajadores$any == 2023,
+]
+
+# Calcular la media de cada país en 2023
+
+resultados_2023 <- do.call(
+  rbind,
+  lapply(
+    split(
+      datos_2023,
+      datos_2023$cntry
+    ),
+    function(df) {
+
+      data.frame(
+        cntry = unique(df$cntry),
+        satisfaccion_2023 = media_ponderada(
+          df$stflife,
+          df$anweight_complet
+        )
+      )
+    }
+  )
+)
+
+# Unir los resultados de 2002 y 2023
+
+resultados_mapa <- merge(
+  resultados_2002,
+  resultados_2023,
+  by = "cntry"
+)
+
+# Calcular el cambio respecto a 2002
+
+resultados_mapa$cambio <-
+  resultados_mapa$satisfaccion_2023 -
+  resultados_mapa$satisfaccion_2002
+
+# Unir los datos con el mapa
+
+mapa_resultados <- merge(
+  mapa_europa,
+  resultados_mapa,
+  by.x = "iso_a2_eh",
+  by.y = "cntry",
+  all.x = TRUE
+)
+
+# Seleccionar los países con datos
+
+mapa_etiquetas <- mapa_resultados[
+  !is.na(mapa_resultados$cambio),
+]
+
+# Crear un punto dentro de cada país
+# para colocar las etiquetas
+
+if (nrow(mapa_etiquetas) > 0) {
+
+  mapa_etiquetas_proyectado <- st_transform(
+    mapa_etiquetas,
+    3035
+  )
+
+  puntos_etiqueta <- st_point_on_surface(
+    st_geometry(
+      mapa_etiquetas_proyectado
+    )
+  )
+
+  puntos_etiqueta <- st_transform(
+    puntos_etiqueta,
+    st_crs(mapa_europa)
+  )
+
+  coordenadas_etiquetas <- st_coordinates(
+    puntos_etiqueta
+  )
+
+  datos_etiquetas <- data.frame(
+    X = coordenadas_etiquetas[, 1],
+    Y = coordenadas_etiquetas[, 2],
+    cambio = mapa_etiquetas$cambio
+  )
+
+  # Evitar mostrar -0.0 en las etiquetas
+
+  datos_etiquetas$cambio_etiqueta <-
+    datos_etiquetas$cambio
+
+  datos_etiquetas$cambio_etiqueta[
+    abs(datos_etiquetas$cambio_etiqueta) < 0.05
+  ] <- 0
+
+} else {
+
+  datos_etiquetas <- data.frame(
+    X = numeric(0),
+    Y = numeric(0),
+    cambio = numeric(0),
+    cambio_etiqueta = numeric(0)
+  )
+}
+
+# Crear el mapa
+
+ggplot(
+  mapa_resultados
+) +
+
+  geom_sf(
+    aes(
+      fill = cambio
+    ),
+    colour = "white",
+    linewidth = 0.2
+  ) +
+
+  # Naranja = disminución
+  # Gris claro = cambio cercano a 0
+  # Azul = aumento
+
+  scale_fill_gradient2(
+    name = "Cambio respecto\na 2002",
+    low = "#D55E00",
+    mid = "#F2F2F2",
+    high = "#0072B2",
+    midpoint = 0,
+    limits = c(-2, 2),
+    na.value = "#BDBDBD",
+    guide = guide_colorbar(
+      title.position = "top"
+    )
+  ) +
+
+  # Mostrar el cambio dentro de cada país
+
+  geom_text(
+    data = datos_etiquetas,
+    aes(
+      x = X,
+      y = Y,
+      label = sprintf(
+        "%+.1f",
+        cambio_etiqueta
+      )
+    ),
+    inherit.aes = FALSE,
+    size = 3.5,
+    fontface = "bold"
+  ) +
+
+  coord_sf(
+    xlim = c(-12, 35),
+    ylim = c(34, 72),
+    expand = FALSE
+  ) +
+
+  labs(
+    title = "Cambio de la satisfacción con la vida desde 2002",
+    subtitle = "Cambio acumulado hasta 2023",
+    caption = "Gris = países fuera de la muestra comparable. Solo se analizan los 15 países presentes en las 11 rondas."
+  ) +
+
+  theme_minimal() +
+
+  theme(
+    axis.text = element_blank(),
+    axis.title = element_blank(),
+    panel.grid = element_blank(),
+    legend.position = "right",
+    plot.caption = element_text(
+      hjust = 0
+    )
+  )
+
+```
+
+El mapa permite observar la dirección y magnitud del cambio acumulado entre 2002 y 2023.
+
+Los valores positivos indican un aumento de la satisfacción respecto a 2002, mientras que los valores negativos indican una disminución.
+
+Los países representados en gris no forman parte de los 15 países seleccionados para el análisis temporal, ya que no están presentes en las 11 rondas analizadas. Por tanto, el color gris indica que el territorio queda fuera de la muestra comparable y no que exista un dato perdido para uno de los países incluidos.
+
+La representación muestra el cambio acumulado entre los dos extremos del periodo y no las variaciones producidas entre las diferentes rondas.
+
+# 5. Conclusiones
+
+El análisis permite identificar diferentes patrones de satisfacción con la vida entre las personas trabajadoras de los países europeos incluidos en la muestra.
+
+En primer lugar, la satisfacción presenta variaciones a lo largo del periodo 2002-2023. La media pasa de `r sprintf("%.2f", satisfaccion_2002)` puntos en 2002 a `r sprintf("%.2f", satisfaccion_2023)` en 2023, con un cambio de `r sprintf("%+.2f", cambio_total)` puntos. La evolución no es completamente lineal y presenta diferencias entre las distintas rondas.
+
+En segundo lugar, se observan diferencias entre países tanto en el nivel medio de satisfacción como en su evolución respecto a 2002. Estas diferencias muestran que el contexto nacional constituye una dimensión relevante para interpretar los niveles observados.
+
+También se observan diferencias asociadas a la situación económica percibida del hogar. En 2023, la satisfacción media es de `r sprintf("%.2f", resultados_economico_2023$satisfaccion_media[resultados_economico_2023$hincfel == "Vive cómodamente"])` entre quienes declaran vivir cómodamente y de `r sprintf("%.2f", resultados_economico_2023$satisfaccion_media[resultados_economico_2023$hincfel == "Tiene muchas dificultades"])` entre quienes declaran tener muchas dificultades.
+
+Asimismo, existen diferencias según la frecuencia de contacto social. La satisfacción media pasa de `r sprintf("%.2f", resultados_social_2023$satisfaccion_media[resultados_social_2023$sclmeet == "Nunca"])` entre quienes declaran no mantener contacto social a `r sprintf("%.2f", resultados_social_2023$satisfaccion_media[resultados_social_2023$sclmeet == "Cada día"])` entre quienes indican contacto diario.
+
+Los resultados muestran, por tanto, patrones relacionados con dimensiones temporales, geográficas, económicas y sociales. Estas relaciones deben interpretarse como asociaciones observadas en los datos y no como relaciones causales.
+
+Desde una perspectiva aplicada, los resultados pueden servir como contexto para comprender diferencias de bienestar entre países y como punto de partida para análisis posteriores que incorporen información específica de las organizaciones y de sus personas trabajadoras.
+
+# 6. Información del entorno reproducible
+
+```{r informacion-entorno}
+
+# Mostrar información del entorno utilizado
+
+sessionInfo()
+
+```
