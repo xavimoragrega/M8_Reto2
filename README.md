@@ -12,7 +12,7 @@ La satisfacción con la vida se mide mediante la variable `stflife`, en una esca
 
 ## Repositorio de GitHub
 
-El código, los datos, el informe y los materiales del proyecto están disponibles en el siguiente repositorio:
+El código, los datos y el informe del proyecto están disponibles en el siguiente repositorio:
 
 [Repositorio de GitHub](https://github.com/xavimoragrega/M8_Reto2)
 
@@ -39,7 +39,6 @@ La carpeta `Datos/` contiene:
 - `Datos/`: datos originales, scripts de depuración y datos depurados.
 - `Dashboard/`: código y archivos necesarios para ejecutar el dashboard interactivo.
 - `Informe/`: código fuente y archivos generados del informe técnico.
-- `Presentacion/`: materiales utilizados para la presentación del proyecto.
 - `README.md`: descripción y documentación del proyecto.
 
 ## Reproducibilidad
@@ -108,6 +107,3 @@ El proyecto incluye visualizaciones para:
 - R Markdown
 - Shiny
 - Git y GitHub
-
-
-
